@@ -69,7 +69,8 @@ The command is intentionally the only trigger. The mod performs no work during
 startup, reload, or player synchronization.
 
 `/runtimedata combat` separately exports `combat-profile.json`. It samples the
-default armor, toughness, and health of every constructible hostile entity,
+default armor, toughness, and health of every constructible entity identified
+by either the hostile mob category or Minecraft's Enemy contract,
 excludes 100-health boss-class entries from percentile selection, and derives
 the pack's Trash/Elite/Boss armor representatives at P50/P75/P90. It changes no
 entities and performs no automatic difficulty scaling.

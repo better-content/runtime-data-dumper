@@ -19,6 +19,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraftforge.registries.ForgeRegistries;
 
 final class CombatProfileExporter {
@@ -42,6 +43,7 @@ final class CombatProfileExporter {
             root.addProperty("schema", "bc.runtime_combat_profile.v1");
             root.addProperty("generated_at", Instant.now().toString());
             root.addProperty("boss_health_exclusion_threshold", BOSS_HEALTH_THRESHOLD);
+            root.addProperty("hostility_classifier", "monster_category_or_enemy_interface");
 
             JsonObject weights = new JsonObject();
             weights.addProperty("trash", 0.60);
@@ -90,13 +92,11 @@ final class CombatProfileExporter {
             List<CombatArmorCanon.Sample> samples,
             JsonArray issues
     ) {
-        if (type.getCategory() != MobCategory.MONSTER) {
-            return;
-        }
         Entity entity = null;
         try {
             entity = type.create(server.overworld());
-            if (entity instanceof LivingEntity living) {
+            if (entity instanceof LivingEntity living
+                    && (type.getCategory() == MobCategory.MONSTER || living instanceof Enemy)) {
                 double health = living.getAttributeValue(Attributes.MAX_HEALTH);
                 samples.add(new CombatArmorCanon.Sample(
                         id.toString(),
