@@ -41,7 +41,6 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.lang.reflect.Method;
 
 public final class RecipeGraphExporter {
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
@@ -233,8 +232,8 @@ public final class RecipeGraphExporter {
         String adapter = null;
         try {
             List<Ingredient> ingredients = recipe.getIngredients();
-            if (isPneumaticPressureChamber(recipe, type)) {
-                ingredients = pneumaticPressureInputs(recipe);
+            if (ReflectivePneumaticRecipeAdapter.supports(recipe, type)) {
+                ingredients = ReflectivePneumaticRecipeAdapter.inputs(recipe);
                 adapter = "pneumaticcraft:pressure_chamber_display_api";
             }
             int slot = 0;
@@ -284,7 +283,7 @@ public final class RecipeGraphExporter {
         try {
             if (adapter != null) {
                 int slot = 0;
-                for (List<ItemStack> alternatives : pneumaticPressureOutputs(recipe)) {
+                for (List<ItemStack> alternatives : ReflectivePneumaticRecipeAdapter.outputs(recipe)) {
                     JsonObject group = new JsonObject();
                     group.addProperty("slot", slot++);
                     JsonArray rows = new JsonArray();
@@ -328,14 +327,14 @@ public final class RecipeGraphExporter {
         requirements.add("pressure", null);
         if (adapter != null) {
             try {
-                requirements.addProperty("pressure", pneumaticPressure(recipe));
+                requirements.addProperty("pressure", ReflectivePneumaticRecipeAdapter.pressure(recipe));
             } catch (Exception error) {
                 issues.add("pressure: " + describe(error));
                 partial = true;
             }
         }
 
-        SemanticRecipeAdapter.Result semantics = SemanticRecipeAdapter.inspect(recipe);
+        ReflectiveRecipeFamilyAdapter.Result semantics = ReflectiveRecipeFamilyAdapter.inspect(recipe);
         if (groups.isEmpty()) {
             append(groups, semantics.inputGroups());
             append(flatInputs, semantics.inputs());
@@ -422,39 +421,6 @@ public final class RecipeGraphExporter {
 
     static boolean hasNavigableOutcome(JsonArray outputs, JsonArray fluidsOut, JsonArray effects) {
         return !outputs.isEmpty() || !fluidsOut.isEmpty() || !effects.isEmpty();
-    }
-
-    private static boolean isPneumaticPressureChamber(Recipe<?> recipe, String type) {
-        return type.equals("pneumaticcraft:pressure_chamber")
-                && hasPublicMethod(recipe.getClass(), "getInputsForDisplay")
-                && hasPublicMethod(recipe.getClass(), "getResultsForDisplay")
-                && hasPublicMethod(recipe.getClass(), "getCraftingPressureForDisplay");
-    }
-
-    private static boolean hasPublicMethod(Class<?> type, String name) {
-        try {
-            type.getMethod(name);
-            return true;
-        } catch (NoSuchMethodException ignored) {
-            return false;
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static List<Ingredient> pneumaticPressureInputs(Recipe<?> recipe) throws ReflectiveOperationException {
-        Method method = recipe.getClass().getMethod("getInputsForDisplay");
-        return (List<Ingredient>) method.invoke(recipe);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static List<List<ItemStack>> pneumaticPressureOutputs(Recipe<?> recipe) throws ReflectiveOperationException {
-        Method method = recipe.getClass().getMethod("getResultsForDisplay");
-        return (List<List<ItemStack>>) method.invoke(recipe);
-    }
-
-    private static float pneumaticPressure(Recipe<?> recipe) throws ReflectiveOperationException {
-        Method method = recipe.getClass().getMethod("getCraftingPressureForDisplay");
-        return ((Number) method.invoke(recipe)).floatValue();
     }
 
     static int ingredientCount(JsonElement ingredient, Ingredient fallback) {

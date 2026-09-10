@@ -35,11 +35,34 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Supplier;
 
-/** Normalizes common public recipe display APIs without linking optional mods. */
-final class SemanticRecipeAdapter {
+/**
+ * The single reflective boundary for optional recipe families without stable compile-time APIs.
+ * Accessor discovery is cached per concrete recipe class; failures are diagnosed with the exact member.
+ */
+final class ReflectiveRecipeFamilyAdapter {
     private static final int MAX_DEPTH = 4;
+    private static final ClassValue<List<Method>> PUBLIC_METHODS = new ClassValue<>() {
+        @Override protected List<Method> computeValue(Class<?> type) {
+            return List.copyOf(safeMembers(type::getMethods));
+        }
+    };
+    private static final ClassValue<List<Field>> PUBLIC_FIELDS = new ClassValue<>() {
+        @Override protected List<Field> computeValue(Class<?> type) {
+            return List.copyOf(safeMembers(type::getFields));
+        }
+    };
+    private static final ClassValue<List<Field>> ALL_FIELDS = new ClassValue<>() {
+        @Override protected List<Field> computeValue(Class<?> type) {
+            List<Field> fields = new ArrayList<>();
+            for (Class<?> cursor = type; cursor != null && cursor != Object.class; cursor = cursor.getSuperclass()) {
+                fields.addAll(safeMembers(cursor::getDeclaredFields));
+            }
+            fields.sort(Comparator.comparing(Field::toGenericString));
+            return List.copyOf(fields);
+        }
+    };
 
-    private SemanticRecipeAdapter() {}
+    private ReflectiveRecipeFamilyAdapter() {}
 
     static Result inspect(Recipe<?> recipe) {
         Collector collector = new Collector();
@@ -57,8 +80,8 @@ final class SemanticRecipeAdapter {
                 } else if (direction != Direction.UNKNOWN) {
                     collector.collect(value, direction, method.getName() + "()", 0);
                 }
-            } catch (Throwable ignored) {
-                // A context-dependent accessor is not evidence. Other accessors may still be exact.
+            } catch (Throwable error) {
+                diagnose(recipe.getClass(), method.getName(), error);
             }
         }
         collector.publicFields(recipe);
@@ -74,7 +97,7 @@ final class SemanticRecipeAdapter {
      * the complete live dump.
      */
     static List<Method> publicMethods(Class<?> type) {
-        return safeMembers(type::getMethods);
+        return new ArrayList<>(PUBLIC_METHODS.get(type));
     }
 
     static <T> List<T> safeMembers(Supplier<T[]> source) {
@@ -83,6 +106,12 @@ final class SemanticRecipeAdapter {
         } catch (LinkageError | SecurityException ignored) {
             return new ArrayList<>();
         }
+    }
+
+    private static void diagnose(Class<?> family, String member, Throwable error) {
+        RecipeGraphMod.LOGGER.warn(
+                "Reflective recipe-family adapter skipped {}#{}: {}",
+                family.getName(), member, error.toString());
     }
 
     static String materialVariantId(String display) {
@@ -318,7 +347,7 @@ final class SemanticRecipeAdapter {
             for (Field field : fields) {
                 if (Modifier.isStatic(field.getModifiers())) continue;
                 Direction direction = direction(field.getName());
-                String requirement = SemanticRecipeAdapter.requirement(field.getName());
+                String requirement = ReflectiveRecipeFamilyAdapter.requirement(field.getName());
                 if (direction == Direction.UNKNOWN && requirement == null) continue;
                 try {
                     Object value = field.get(root);
@@ -327,8 +356,8 @@ final class SemanticRecipeAdapter {
                     } else {
                         collect(value, direction, field.getName(), 0);
                     }
-                } catch (Throwable ignored) {
-                    // Only successfully read public state is evidence.
+                } catch (Throwable error) {
+                    diagnose(root.getClass(), field.getName(), error);
                 }
             }
         }
@@ -1669,7 +1698,7 @@ final class SemanticRecipeAdapter {
         }
 
         private static List<Field> publicFields(Class<?> type) {
-            return safeMembers(type::getFields);
+            return new ArrayList<>(PUBLIC_FIELDS.get(type));
         }
 
         void collect(Object value, Direction direction, String path, int depth) {
@@ -1732,7 +1761,7 @@ final class SemanticRecipeAdapter {
                 String nestedPath = path + "." + field.getName();
                 try {
                     Object child = field.get(value);
-                    String req = SemanticRecipeAdapter.requirement(field.getName());
+                    String req = ReflectiveRecipeFamilyAdapter.requirement(field.getName());
                     if (req != null && child instanceof Number number) requirement(req, number, nestedPath);
                     collect(child, nested, nestedPath, depth + 1);
                 } catch (Throwable ignored) {
@@ -1892,12 +1921,7 @@ final class SemanticRecipeAdapter {
         }
 
         private static List<Field> allFields(Class<?> type) {
-            List<Field> fields = new ArrayList<>();
-            for (Class<?> cursor = type; cursor != null && cursor != Object.class; cursor = cursor.getSuperclass()) {
-                fields.addAll(safeMembers(cursor::getDeclaredFields));
-            }
-            fields.sort(Comparator.comparing(Field::toGenericString));
-            return fields;
+            return new ArrayList<>(ALL_FIELDS.get(type));
         }
     }
 }

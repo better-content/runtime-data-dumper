@@ -42,7 +42,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.lang.reflect.Method;
 
 final class RuntimeEvidenceExporter {
     private static final int TRADE_SAMPLE_COUNT = 16;
@@ -337,7 +336,7 @@ final class RuntimeEvidenceExporter {
                 row.add("value", encoded);
                 rows.add(id, row);
             } catch (Throwable error) {
-                JsonObject fallback = emptyFabricBiomeModifier(entry.getValue());
+                JsonObject fallback = ReflectiveFabricBiomeModifierAdapter.encodeIfEmpty(entry.getValue());
                 if (fallback != null) {
                     rows.add(id, fallback);
                 } else {
@@ -346,28 +345,6 @@ final class RuntimeEvidenceExporter {
             }
         });
         return new EncodedRegistry(rows, registry.size());
-    }
-
-    private static JsonObject emptyFabricBiomeModifier(Object value) {
-        if (!value.getClass().getName().equals(
-                "net.fabricmc.fabric.impl.biome.modification.BiomeModificationImpl$FabricBiomeModifier")) {
-            return null;
-        }
-        try {
-            Method accessor = value.getClass().getMethod("modifiers");
-            Object modifiers = accessor.invoke(value);
-            if (!(modifiers instanceof List<?> list) || !list.isEmpty()) return null;
-            JsonObject encoded = new JsonObject();
-            encoded.addProperty("type", "fabric_biome_api_v1:empty_modifier");
-            encoded.add("modifiers", new JsonArray());
-            JsonObject row = new JsonObject();
-            row.addProperty("java_class", value.getClass().getName());
-            row.addProperty("normalization_adapter", "fabric_biome_api_v1:empty_modifier");
-            row.add("value", encoded);
-            return row;
-        } catch (ReflectiveOperationException ignored) {
-            return null;
-        }
     }
 
     private static JsonObject stack(ItemStack stack) {

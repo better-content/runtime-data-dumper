@@ -7,8 +7,11 @@ import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -17,6 +20,48 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class RecipeGraphExporterTest {
+    @Test
+    void reflectionIsConfinedToExactNamedCachedAdapterBoundaries() throws Exception {
+        Set<String> allowed = Set.of(
+                "com/bettercontent/runtimedatadumper/ReflectiveFabricBiomeModifierAdapter.java",
+                "com/bettercontent/runtimedatadumper/ReflectivePneumaticRecipeAdapter.java",
+                "com/bettercontent/runtimedatadumper/ReflectiveRecipeFamilyAdapter.java");
+        String reflectionSyntax = "java.lang.reflect|\\.getDeclared(?:Field|Fields|Method|Methods|Constructor|Constructors)\\("
+                + "|\\.getMethod\\(|\\.getMethods\\(|trySetAccessible\\(|setAccessible\\(|\\.invoke\\(";
+
+        Set<String> matches;
+        try (var files = Files.walk(Path.of("src/main/java"))) {
+            matches = files.filter(path -> path.toString().endsWith(".java"))
+                    .filter(path -> {
+                        try {
+                            return Files.readString(path).matches("(?s).*?(?:" + reflectionSyntax + ").*");
+                        } catch (Exception error) {
+                            throw new IllegalStateException(error);
+                        }
+                    })
+                    .map(path -> Path.of("src/main/java").relativize(path).toString())
+                    .collect(java.util.stream.Collectors.toSet());
+        }
+        assertEquals(allowed, matches);
+    }
+
+    @Test
+    void pneumaticFamilyAccessorDiscoveryIsCachedByConcreteClass() {
+        int before = ReflectivePneumaticRecipeAdapter.resolutionCountForTests();
+        FakePneumaticRecipe recipe = new FakePneumaticRecipe();
+
+        assertTrue(ReflectivePneumaticRecipeAdapter.supports(recipe, "pneumaticcraft:pressure_chamber"));
+        assertTrue(ReflectivePneumaticRecipeAdapter.supports(recipe, "pneumaticcraft:pressure_chamber"));
+        assertEquals(before + 1, ReflectivePneumaticRecipeAdapter.resolutionCountForTests());
+        assertFalse(ReflectivePneumaticRecipeAdapter.supports(recipe, "minecraft:crafting"));
+    }
+
+    public static final class FakePneumaticRecipe {
+        public List<Object> getInputsForDisplay() { return List.of(); }
+        public List<Object> getResultsForDisplay() { return List.of(); }
+        public float getCraftingPressureForDisplay() { return 2.5F; }
+    }
+
     @Test
     void dimensionIdentifiersAreStableAndSorted() {
         JsonArray rows = RuntimeEvidenceExporter.sortedIds(List.of(
@@ -74,26 +119,26 @@ final class RecipeGraphExporterTest {
 
     @Test
     void semanticAccessorsAreClassifiedWithoutGuessingUnrelatedGetters() {
-        assertEquals(SemanticRecipeAdapter.Direction.INPUT, SemanticRecipeAdapter.direction("getInputFluid"));
-        assertEquals(SemanticRecipeAdapter.Direction.OUTPUT, SemanticRecipeAdapter.direction("getOutputWithByproducts"));
-        assertEquals(SemanticRecipeAdapter.Direction.INPUT, SemanticRecipeAdapter.direction("getFluidIn"));
-        assertEquals(SemanticRecipeAdapter.Direction.OUTPUT, SemanticRecipeAdapter.direction("getFluidOut"));
-        assertEquals(SemanticRecipeAdapter.Direction.CATALYST, SemanticRecipeAdapter.direction("getCatalyst"));
-        assertEquals(SemanticRecipeAdapter.Direction.UNKNOWN, SemanticRecipeAdapter.direction("getId"));
-        assertEquals("pressure", SemanticRecipeAdapter.requirement("getRequiredPressure"));
-        assertEquals("heat", SemanticRecipeAdapter.requirement("getTemperature"));
-        assertEquals("time", SemanticRecipeAdapter.requirement("getTicks"));
-        assertEquals("energy", SemanticRecipeAdapter.requirement("getSourceCost"));
-        assertNull(SemanticRecipeAdapter.requirement("getMinimumTier"));
+        assertEquals(ReflectiveRecipeFamilyAdapter.Direction.INPUT, ReflectiveRecipeFamilyAdapter.direction("getInputFluid"));
+        assertEquals(ReflectiveRecipeFamilyAdapter.Direction.OUTPUT, ReflectiveRecipeFamilyAdapter.direction("getOutputWithByproducts"));
+        assertEquals(ReflectiveRecipeFamilyAdapter.Direction.INPUT, ReflectiveRecipeFamilyAdapter.direction("getFluidIn"));
+        assertEquals(ReflectiveRecipeFamilyAdapter.Direction.OUTPUT, ReflectiveRecipeFamilyAdapter.direction("getFluidOut"));
+        assertEquals(ReflectiveRecipeFamilyAdapter.Direction.CATALYST, ReflectiveRecipeFamilyAdapter.direction("getCatalyst"));
+        assertEquals(ReflectiveRecipeFamilyAdapter.Direction.UNKNOWN, ReflectiveRecipeFamilyAdapter.direction("getId"));
+        assertEquals("pressure", ReflectiveRecipeFamilyAdapter.requirement("getRequiredPressure"));
+        assertEquals("heat", ReflectiveRecipeFamilyAdapter.requirement("getTemperature"));
+        assertEquals("time", ReflectiveRecipeFamilyAdapter.requirement("getTicks"));
+        assertEquals("energy", ReflectiveRecipeFamilyAdapter.requirement("getSourceCost"));
+        assertNull(ReflectiveRecipeFamilyAdapter.requirement("getMinimumTier"));
     }
 
     @Test
     void unavailableOptionalSignaturesAreSkippedInsteadOfCrashingTheDump() {
-        assertTrue(SemanticRecipeAdapter.<Method>safeMembers(() -> {
+        assertTrue(ReflectiveRecipeFamilyAdapter.<Method>safeMembers(() -> {
             throw new NoClassDefFoundError("client-only optional recipe display type");
         }).isEmpty());
-        assertFalse(SemanticRecipeAdapter.publicMethods(String.class).isEmpty());
-        assertEquals("tconstruct:rock#stone", SemanticRecipeAdapter.materialVariantId("MaterialVariant{tconstruct:rock#stone}"));
+        assertFalse(ReflectiveRecipeFamilyAdapter.publicMethods(String.class).isEmpty());
+        assertEquals("tconstruct:rock#stone", ReflectiveRecipeFamilyAdapter.materialVariantId("MaterialVariant{tconstruct:rock#stone}"));
     }
 
     @Test
@@ -107,81 +152,81 @@ final class RecipeGraphExporterTest {
 
     @Test
     void contextualFamiliesHaveExplicitMachineNavigableOperationKinds() {
-        assertEquals("potion_flask_state_mutation", SemanticRecipeAdapter.operationKind(
+        assertEquals("potion_flask_state_mutation", ReflectiveRecipeFamilyAdapter.operationKind(
                 "wayoftime.bloodmagic.recipe.flask.RecipePotionIncreaseLength"));
-        assertEquals("potion_flask_state_mutation", SemanticRecipeAdapter.operationKind(
+        assertEquals("potion_flask_state_mutation", ReflectiveRecipeFamilyAdapter.operationKind(
                 "wayoftime.bloodmagic.recipe.flask.RecipePotionTransform"));
-        assertNull(SemanticRecipeAdapter.operationKind(
+        assertNull(ReflectiveRecipeFamilyAdapter.operationKind(
                 "wayoftime.bloodmagic.recipe.flask.RecipePotionFlaskTransform"));
-        assertEquals("material_scaled_melting", SemanticRecipeAdapter.operationKind(
+        assertEquals("material_scaled_melting", ReflectiveRecipeFamilyAdapter.operationKind(
                 "slimeknights.tconstruct.library.recipe.melting.MaterialMeltingRecipe"));
-        assertEquals("conditional_part_recycling", SemanticRecipeAdapter.operationKind(
+        assertEquals("conditional_part_recycling", ReflectiveRecipeFamilyAdapter.operationKind(
                 "slimeknights.tconstruct.library.recipe.partbuilder.recycle.PartBuilderRecycle"));
-        assertEquals("conditional_tool_part_recycling", SemanticRecipeAdapter.operationKind(
+        assertEquals("conditional_tool_part_recycling", ReflectiveRecipeFamilyAdapter.operationKind(
                 "slimeknights.tconstruct.tables.recipe.PartBuilderToolRecycle"));
-        assertEquals("tool_state_mutation", SemanticRecipeAdapter.operationKind(
+        assertEquals("tool_state_mutation", ReflectiveRecipeFamilyAdapter.operationKind(
                 "slimeknights.tconstruct.tables.recipe.TinkerStationDamagingRecipe"));
-        assertEquals("effect_provider_metadata", SemanticRecipeAdapter.operationKind(
+        assertEquals("effect_provider_metadata", ReflectiveRecipeFamilyAdapter.operationKind(
                 "net.mehvahdjukaar.jeed.recipes.EffectProviderRecipe"));
-        assertEquals("bee_temperature_tolerance_modifier", SemanticRecipeAdapter.operationKind(
+        assertEquals("bee_temperature_tolerance_modifier", ReflectiveRecipeFamilyAdapter.operationKind(
                 "com.accbdd.complicated_bees.recipe.TempUnitRecipe"));
-        assertEquals("spellbook_tier_upgrade", SemanticRecipeAdapter.operationKind(
+        assertEquals("spellbook_tier_upgrade", ReflectiveRecipeFamilyAdapter.operationKind(
                 "alexthw.ars_elemental.recipe.NetheriteUpgradeRecipe"));
-        assertEquals("matter_cannon_ammo_metadata", SemanticRecipeAdapter.operationKind(
+        assertEquals("matter_cannon_ammo_metadata", ReflectiveRecipeFamilyAdapter.operationKind(
                 "appeng.recipes.mattercannon.MatterCannonAmmo"));
-        assertEquals("non_gameplay_client_recipe_metadata", SemanticRecipeAdapter.operationKind(
+        assertEquals("non_gameplay_client_recipe_metadata", ReflectiveRecipeFamilyAdapter.operationKind(
                 "com.almostreliable.unified.recipe.ClientRecipeTracker"));
-        assertEquals("spirit_item_repair", SemanticRecipeAdapter.operationKind(
+        assertEquals("spirit_item_repair", ReflectiveRecipeFamilyAdapter.operationKind(
                 "com.sammy.malum.common.recipe.SpiritRepairRecipe"));
-        assertEquals("block_heat_property_metadata", SemanticRecipeAdapter.operationKind(
+        assertEquals("block_heat_property_metadata", ReflectiveRecipeFamilyAdapter.operationKind(
                 "me.desht.pneumaticcraft.common.recipes.other.HeatPropertiesRecipeImpl"));
-        assertEquals("fluid_fuel_property_metadata", SemanticRecipeAdapter.operationKind(
+        assertEquals("fluid_fuel_property_metadata", ReflectiveRecipeFamilyAdapter.operationKind(
                 "me.desht.pneumaticcraft.common.recipes.other.FuelQualityRecipeImpl"));
-        assertEquals("ritual_block_highlight", SemanticRecipeAdapter.operationKind(
+        assertEquals("ritual_block_highlight", ReflectiveRecipeFamilyAdapter.operationKind(
                 "com.hollingsworth.arsnouveau.api.recipe.ScryRitualRecipe"));
-        assertEquals("living_armor_downgrade_mutation", SemanticRecipeAdapter.operationKind(
+        assertEquals("living_armor_downgrade_mutation", ReflectiveRecipeFamilyAdapter.operationKind(
                 "wayoftime.bloodmagic.recipe.RecipeLivingDowngrade"));
-        assertEquals("entity_brewing_effect", SemanticRecipeAdapter.operationKind(
+        assertEquals("entity_brewing_effect", ReflectiveRecipeFamilyAdapter.operationKind(
                 "com.Polarice3.Goety.common.crafting.BrewingRecipe"));
-        assertEquals("soul_absorption", SemanticRecipeAdapter.operationKind(
+        assertEquals("soul_absorption", ReflectiveRecipeFamilyAdapter.operationKind(
                 "com.Polarice3.Goety.common.crafting.SoulAbsorberRecipes"));
-        assertEquals("dynamic_item_state_crafting", SemanticRecipeAdapter.operationKind(
+        assertEquals("dynamic_item_state_crafting", ReflectiveRecipeFamilyAdapter.operationKind(
                 "net.minecraft.world.item.crafting.ArmorDyeRecipe"));
-        assertEquals("tool_overslime_restoration", SemanticRecipeAdapter.operationKind(
+        assertEquals("tool_overslime_restoration", ReflectiveRecipeFamilyAdapter.operationKind(
                 "slimeknights.tconstruct.library.recipe.modifiers.adding.OverslimeCraftingTableRecipe"));
-        assertEquals("tool_modifier_extraction", SemanticRecipeAdapter.operationKind(
+        assertEquals("tool_modifier_extraction", ReflectiveRecipeFamilyAdapter.operationKind(
                 "slimeknights.tconstruct.tools.recipe.ExtractModifierRecipe"));
-        assertEquals("ritual_meteor_world_effect", SemanticRecipeAdapter.operationKind(
+        assertEquals("ritual_meteor_world_effect", ReflectiveRecipeFamilyAdapter.operationKind(
                 "wayoftime.bloodmagic.recipe.RecipeMeteor"));
-        assertEquals("placement_policy_metadata", SemanticRecipeAdapter.operationKind(
+        assertEquals("placement_policy_metadata", ReflectiveRecipeFamilyAdapter.operationKind(
                 "com.aetherteam.aether.recipe.recipes.ban.BlockBanRecipe"));
-        assertEquals("item_modifier_application", SemanticRecipeAdapter.operationKind(
+        assertEquals("item_modifier_application", ReflectiveRecipeFamilyAdapter.operationKind(
                 "com.stal111.forbidden_arcanus.common.recipe.ApplyModifierRecipe"));
-        assertEquals("armor_tier_upgrade", SemanticRecipeAdapter.operationKind(
+        assertEquals("armor_tier_upgrade", ReflectiveRecipeFamilyAdapter.operationKind(
                 "com.hollingsworth.arsnouveau.api.enchanting_apparatus.ArmorUpgradeRecipe"));
     }
 
     @Test
     void clientSynchronizationTrackersRemainDistinctFromGameplaySemantics() {
-        assertEquals("non_gameplay_client_recipe_metadata", SemanticRecipeAdapter.operationKind(
+        assertEquals("non_gameplay_client_recipe_metadata", ReflectiveRecipeFamilyAdapter.operationKind(
                 "com.almostreliable.unified.recipe.ClientRecipeTracker"));
-        assertEquals("tool_part_replacement", SemanticRecipeAdapter.operationKind(
+        assertEquals("tool_part_replacement", ReflectiveRecipeFamilyAdapter.operationKind(
                 "slimeknights.tconstruct.tables.recipe.TinkerStationPartSwapping"));
-        assertEquals("gas_reaction", SemanticRecipeAdapter.operationKind(
+        assertEquals("gas_reaction", ReflectiveRecipeFamilyAdapter.operationKind(
                 "org.valkyrienskies.clockwork.content.logistics.gas.crafter.GasCraftingRecipe"));
-        assertEquals("tool_modifier_set_mutation", SemanticRecipeAdapter.operationKind(
+        assertEquals("tool_modifier_set_mutation", ReflectiveRecipeFamilyAdapter.operationKind(
                 "slimeknights.tconstruct.library.recipe.worktable.ModifierSetWorktableRecipe"));
-        assertEquals("dynamic_item_state_crafting", SemanticRecipeAdapter.operationKind(
+        assertEquals("dynamic_item_state_crafting", ReflectiveRecipeFamilyAdapter.operationKind(
                 "net.mehvahdjukaar.supplementaries.common.items.crafting.WeatheredMapRecipe"));
-        assertEquals("dynamic_item_state_crafting", SemanticRecipeAdapter.operationKind(
+        assertEquals("dynamic_item_state_crafting", ReflectiveRecipeFamilyAdapter.operationKind(
                 "com.github.alexthe666.rats.server.recipes.DemonRatSwitchRecipe"));
-        assertEquals("item_disassembly", SemanticRecipeAdapter.operationKind(
+        assertEquals("item_disassembly", ReflectiveRecipeFamilyAdapter.operationKind(
                 "twilightforest.item.recipe.UncraftingRecipe"));
-        assertEquals("fluid_brewing", SemanticRecipeAdapter.operationKind(
+        assertEquals("fluid_brewing", ReflectiveRecipeFamilyAdapter.operationKind(
                 "io.redspace.ironsspellbooks.recipe_types.alchemist_cauldron.BrewAlchemistCauldronRecipe"));
-        assertEquals("world_state_transform", SemanticRecipeAdapter.operationKind(
+        assertEquals("world_state_transform", ReflectiveRecipeFamilyAdapter.operationKind(
                 "appeng.recipes.entropy.EntropyRecipe"));
-        assertEquals("fan_splashing", SemanticRecipeAdapter.operationKind(
+        assertEquals("fan_splashing", ReflectiveRecipeFamilyAdapter.operationKind(
                 "com.simibubi.create.content.kinetics.fan.processing.SplashingRecipe"));
     }
 
