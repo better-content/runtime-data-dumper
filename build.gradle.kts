@@ -44,9 +44,6 @@ repositories {
 dependencies {
     minecraft("net.minecraftforge:forge:${property("minecraft_version")}-${property("forge_version")}")
     compileOnly(fg.deobf("curse.maven:architectury-api-419699:5137938"))
-    compileOnly(fg.deobf("curse.maven:ftb-library-forge-404465:7296748"))
-    compileOnly(fg.deobf("curse.maven:ftb-teams-forge-404468:7499810"))
-    compileOnly(fg.deobf("curse.maven:ftb-quests-forge-289412:7909594"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
 }
 

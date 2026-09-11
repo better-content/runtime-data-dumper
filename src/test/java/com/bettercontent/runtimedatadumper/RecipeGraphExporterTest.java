@@ -296,19 +296,4 @@ final class RecipeGraphExporterTest {
         assertEquals("unsupported_schema", unsupported.row().get("reason").getAsString());
     }
 
-    @Test
-    void atlasFingerprintIsDeterministicAndOrderSensitive() throws Exception {
-        String first = AtlasManifestSupport.fingerprint(List.of("registry\0minecraft:apple", "registry\0minecraft:stick"));
-        assertEquals(first, AtlasManifestSupport.fingerprint(List.of("registry\0minecraft:apple", "registry\0minecraft:stick")));
-        assertNotEquals(first, AtlasManifestSupport.fingerprint(List.of("registry\0minecraft:stick", "registry\0minecraft:apple")));
-    }
-
-    @Test
-    void atlasManifestDeclaresStableContract() {
-        JsonObject manifest = AtlasManifestSupport.base("snapshot", "fingerprint", 42);
-        assertEquals("bc.quest_icon_atlas.v1", manifest.get("schema").getAsString());
-        assertEquals(64, manifest.get("tile_size").getAsInt());
-        assertEquals(2048, manifest.get("page_size").getAsInt());
-        assertEquals(42, manifest.get("planned_entry_count").getAsInt());
-    }
 }

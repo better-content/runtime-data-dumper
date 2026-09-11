@@ -19,14 +19,6 @@ resources. Missing compatibility targets are retained as rejected diagnostics.
 Portable results do not prove a particular client's configuration, resource-pack
 overrides, entity/spell lighting, or shader-only emissive effects.
 
-On a fully loaded client, `/runtimedata atlas` exports a complete live-rendered
-item and FTB Quests icon atlas under `generated/runtime-atlases/`. The export
-uses the active baked models, custom item renderers, stack NBT, and selected
-resource packs. It is intentionally separate from the server-authoritative dump:
-the atlas requires an OpenGL client and a synchronized FTB quest file. Output is
-staged and only promoted when every registry and resolved quest icon rendered
-successfully.
-
 Trade output is explicitly sampled evidence: each effective listing is invoked
 with 16 deterministic seeds for every villager type. It preserves dynamic
 listing classes and representative offer NBT without claiming that a finite
