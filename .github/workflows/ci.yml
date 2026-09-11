@@ -9,8 +9,9 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -18,5 +19,16 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Validate
-        run: ./gradlew build --no-daemon
+      - name: Verify repository
+        run: ./gradlew --no-daemon build
+      - name: Preserve verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: repository-verification
+          path: |
+            build/reports/
+            build/test-results/
+            build/ci-provider-jars/providers.json
+          if-no-files-found: ignore
+          retention-days: 14
