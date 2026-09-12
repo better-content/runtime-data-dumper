@@ -127,7 +127,7 @@ final class ReflectiveRecipeFamilyAdapter {
                 Method method = cursor.getDeclaredMethod(name);
                 method.trySetAccessible();
                 return method.invoke(root);
-            } catch (NoSuchMethodException ignored) {
+            } catch (NoSuchMethodException | LinkageError | SecurityException ignored) {
                 // Continue through the hierarchy without resolving unrelated optional signatures.
             } catch (Throwable ignored) {
                 return null;
