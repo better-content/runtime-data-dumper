@@ -120,6 +120,22 @@ final class ReflectiveRecipeFamilyAdapter {
         return new ArrayList<>(PUBLIC_METHODS.get(type));
     }
 
+    static Object invokeNoArg(Object root, String name) {
+        if (root == null) return null;
+        for (Class<?> cursor = root.getClass(); cursor != null && cursor != Object.class; cursor = cursor.getSuperclass()) {
+            try {
+                Method method = cursor.getDeclaredMethod(name);
+                method.trySetAccessible();
+                return method.invoke(root);
+            } catch (NoSuchMethodException ignored) {
+                // Continue through the hierarchy without resolving unrelated optional signatures.
+            } catch (Throwable ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
     static <T> List<T> safeMembers(Supplier<T[]> source) {
         try {
             return new ArrayList<>(List.of(source.get()));
@@ -391,6 +407,9 @@ final class ReflectiveRecipeFamilyAdapter {
             if (classOrSuperclassNamed(recipe.getClass(),
                     "com.simibubi.create.content.processing.recipe.ProcessingRecipe")) {
                 createProcessingRecipe(recipe);
+                if (className.equals("org.valkyrienskies.clockwork.content.logistics.gas.crafter.GasCraftingRecipe")) {
+                    clockworkGasCrafting(recipe);
+                }
             } else if (classOrSuperclassNamed(recipe.getClass(),
                     "slimeknights.tconstruct.library.recipe.melting.MeltingRecipe")) {
                 tconstructMelting(recipe);
@@ -456,8 +475,6 @@ final class ReflectiveRecipeFamilyAdapter {
                 arsArmorUpgrade(recipe);
             } else if (className.equals("com.stal111.forbidden_arcanus.common.recipe.IncreaseEdelwoodBucketFullnessRecipe")) {
                 forbiddenBucketFullness();
-            } else if (className.equals("org.valkyrienskies.clockwork.content.logistics.gas.crafter.GasCraftingRecipe")) {
-                clockworkGasCrafting(recipe);
             } else if (className.equals("slimeknights.tconstruct.tables.recipe.TinkerStationPartSwapping")) {
                 tconstructPartSwapping(recipe);
             } else if (className.equals("slimeknights.tconstruct.library.recipe.worktable.ModifierSetWorktableRecipe")) {
@@ -1754,17 +1771,6 @@ final class ReflectiveRecipeFamilyAdapter {
                 return amountValue instanceof Number;
             }
             return false;
-        }
-
-        private static Object invokeNoArg(Object root, String name) {
-            if (root == null) return null;
-            try {
-                Method method = root.getClass().getMethod(name);
-                method.trySetAccessible();
-                return method.invoke(root);
-            } catch (Throwable ignored) {
-                return null;
-            }
         }
 
         private void collectAccessor(Object root, String name, Direction direction) {

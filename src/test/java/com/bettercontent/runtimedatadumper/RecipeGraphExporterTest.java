@@ -20,7 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class RecipeGraphExporterTest {
-    private static class FamilyBase {}
+    private static class FamilyBase {
+        public String inheritedValue() { return "inherited"; }
+    }
     private static final class FamilyChild extends FamilyBase {}
 
     @Test
@@ -68,6 +70,12 @@ final class RecipeGraphExporterTest {
                 FamilyChild.class, FamilyBase.class.getName()));
         assertFalse(ReflectiveRecipeFamilyAdapter.classOrSuperclassNamed(
                 FamilyChild.class, String.class.getName()));
+    }
+
+    @Test
+    void exactAccessorLookupWalksSuperclassesWithoutEnumeratingOptionalSignatures() {
+        assertEquals("inherited", ReflectiveRecipeFamilyAdapter.invokeNoArg(new FamilyChild(), "inheritedValue"));
+        assertNull(ReflectiveRecipeFamilyAdapter.invokeNoArg(new FamilyChild(), "missingValue"));
     }
 
     @Test
