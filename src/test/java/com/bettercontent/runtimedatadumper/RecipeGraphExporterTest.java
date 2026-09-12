@@ -20,6 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class RecipeGraphExporterTest {
+    private static class FamilyBase {}
+    private static final class FamilyChild extends FamilyBase {}
+
     @Test
     void reflectionIsConfinedToExactNamedCachedAdapterBoundaries() throws Exception {
         Set<String> allowed = Set.of(
@@ -43,6 +46,39 @@ final class RecipeGraphExporterTest {
                     .collect(java.util.stream.Collectors.toSet());
         }
         assertEquals(allowed, matches);
+    }
+
+    @Test
+    void recipeGraphV3UsesDeterministicQuantitativeFamilyAdapters() throws Exception {
+        String exporter = Files.readString(Path.of(
+                "src/main/java/com/bettercontent/runtimedatadumper/RecipeGraphExporter.java"));
+        String adapter = Files.readString(Path.of(
+                "src/main/java/com/bettercontent/runtimedatadumper/ReflectiveRecipeFamilyAdapter.java"));
+        assertTrue(exporter.contains("bc.recipe_graph.v3"));
+        assertTrue(exporter.contains("semantics.authoritativeOutputs()"));
+        assertTrue(adapter.contains("getRollableResults"));
+        assertTrue(adapter.contains("getMatchingFluidStacks"));
+        assertTrue(adapter.contains("getFluids"));
+        assertTrue(adapter.contains("method.getName().equals(\"rollResults\")"));
+    }
+
+    @Test
+    void optionalRecipeFamiliesAreRecognizedThroughTheirSuperclass() {
+        assertTrue(ReflectiveRecipeFamilyAdapter.classOrSuperclassNamed(
+                FamilyChild.class, FamilyBase.class.getName()));
+        assertFalse(ReflectiveRecipeFamilyAdapter.classOrSuperclassNamed(
+                FamilyChild.class, String.class.getName()));
+    }
+
+    @Test
+    void deterministicOutputsExposeOnlyNonCertainProbabilities() {
+        JsonObject probabilistic = JsonParser.parseString("{\"kind\":\"item\"}").getAsJsonObject();
+        ReflectiveRecipeFamilyAdapter.addChance(probabilistic, 0.25);
+        assertEquals(0.25, probabilistic.get("chance").getAsDouble());
+
+        JsonObject certain = JsonParser.parseString("{\"kind\":\"item\"}").getAsJsonObject();
+        ReflectiveRecipeFamilyAdapter.addChance(certain, 1.0);
+        assertFalse(certain.has("chance"));
     }
 
     @Test

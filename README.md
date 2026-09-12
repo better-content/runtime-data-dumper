@@ -34,6 +34,12 @@ as authoritative. Worldgen registry data proves configured live state, not
 placement frequency or occurrence in a generated world; loaded loot tables
 likewise do not prove that their runtime context is reachable.
 
+`recipes.json` uses `bc.recipe_graph.v3`. Deterministic family adapters preserve
+all Create/Sifter outputs with their probabilities, exact Create and TConstruct
+fluid amounts, and recipe-level heat requirements. They never sample randomized
+`rollResults()` methods. Known quantitative families make the graph incomplete
+when those semantics cannot be recovered.
+
 Optional recipe adapters only emit edges backed by live accessors or pinned
 serializer state. In addition to item and fluid edges, the graph can therefore
 name block transformations, TConstruct materials/modifiers/modifier slots, and

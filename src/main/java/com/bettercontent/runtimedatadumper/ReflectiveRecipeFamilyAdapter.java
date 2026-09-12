@@ -66,27 +66,47 @@ final class ReflectiveRecipeFamilyAdapter {
 
     static Result inspect(Recipe<?> recipe) {
         Collector collector = new Collector();
-        List<Method> methods = publicMethods(recipe.getClass());
-        methods.sort(Comparator.comparing(Method::toGenericString));
-        for (Method method : methods) {
-            if (method.getParameterCount() != 0 || Modifier.isStatic(method.getModifiers()) || method.isBridge()) continue;
-            Direction direction = direction(method.getName());
-            String requirement = requirement(method.getName());
-            if (direction == Direction.UNKNOWN && requirement == null) continue;
-            try {
-                Object value = method.invoke(recipe);
-                if (requirement != null && value instanceof Number number) {
-                    collector.requirement(requirement, number, method.getName() + "()");
-                } else if (direction != Direction.UNKNOWN) {
-                    collector.collect(value, direction, method.getName() + "()", 0);
+        boolean exactFamily = classOrSuperclassNamed(recipe.getClass(),
+                "com.simibubi.create.content.processing.recipe.ProcessingRecipe")
+                || classOrSuperclassNamed(recipe.getClass(),
+                        "slimeknights.tconstruct.library.recipe.melting.MeltingRecipe")
+                || classOrSuperclassNamed(recipe.getClass(),
+                        "slimeknights.tconstruct.library.recipe.casting.ItemCastingRecipe");
+        if (!exactFamily) {
+            List<Method> methods = publicMethods(recipe.getClass());
+            methods.sort(Comparator.comparing(Method::toGenericString));
+            for (Method method : methods) {
+                if (method.getParameterCount() != 0 || Modifier.isStatic(method.getModifiers()) || method.isBridge()
+                        || method.getName().equals("rollResults")) continue;
+                Direction direction = direction(method.getName());
+                String requirement = requirement(method.getName());
+                if (direction == Direction.UNKNOWN && requirement == null) continue;
+                try {
+                    Object value = method.invoke(recipe);
+                    if (requirement != null && value instanceof Number number) {
+                        collector.requirement(requirement, number, method.getName() + "()");
+                    } else if (direction != Direction.UNKNOWN) {
+                        collector.collect(value, direction, method.getName() + "()", 0);
+                    }
+                } catch (Throwable error) {
+                    diagnose(recipe.getClass(), method.getName(), error);
                 }
-            } catch (Throwable error) {
-                diagnose(recipe.getClass(), method.getName(), error);
             }
+            collector.publicFields(recipe);
         }
-        collector.publicFields(recipe);
         collector.knownRecipeSemantics(recipe);
         return collector.result();
+    }
+
+    static boolean classOrSuperclassNamed(Class<?> type, String className) {
+        for (Class<?> cursor = type; cursor != null; cursor = cursor.getSuperclass()) {
+            if (cursor.getName().equals(className)) return true;
+        }
+        return false;
+    }
+
+    static void addChance(JsonObject edge, double chance) {
+        if (chance < 1.0) edge.addProperty("chance", chance);
     }
 
     /**
@@ -294,7 +314,8 @@ final class ReflectiveRecipeFamilyAdapter {
             JsonArray effects,
             JsonObject requirements,
             JsonArray evidence,
-            boolean contextualComplete
+            boolean contextualComplete,
+            boolean authoritativeOutputs
     ) {
         boolean hasSemantics() {
             return !inputs.isEmpty() || !outputs.isEmpty() || !fluidsIn.isEmpty() || !fluidsOut.isEmpty()
@@ -317,10 +338,11 @@ final class ReflectiveRecipeFamilyAdapter {
         private final Set<Object> visited = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
         private String operationKind;
         private boolean contextualComplete = true;
+        private boolean authoritativeOutputs;
 
         Result result() {
             return new Result(inputGroups, inputs, outputGroups, outputs, catalysts, fluidsIn, fluidsOut,
-                    operationKind, effects, requirements, evidence, contextualComplete);
+                    operationKind, effects, requirements, evidence, contextualComplete, authoritativeOutputs);
         }
 
         void requirement(String kind, Number value, String path) {
@@ -366,7 +388,16 @@ final class ReflectiveRecipeFamilyAdapter {
             String className = recipe.getClass().getName();
             String knownOperation = operationKind(className);
             if (knownOperation != null) operation(knownOperation, className);
-            if (isBloodMagicPotionStateMutation(className)) {
+            if (classOrSuperclassNamed(recipe.getClass(),
+                    "com.simibubi.create.content.processing.recipe.ProcessingRecipe")) {
+                createProcessingRecipe(recipe);
+            } else if (classOrSuperclassNamed(recipe.getClass(),
+                    "slimeknights.tconstruct.library.recipe.melting.MeltingRecipe")) {
+                tconstructMelting(recipe);
+            } else if (classOrSuperclassNamed(recipe.getClass(),
+                    "slimeknights.tconstruct.library.recipe.casting.ItemCastingRecipe")) {
+                tconstructItemCasting(recipe);
+            } else if (isBloodMagicPotionStateMutation(className)) {
                 bloodMagicFlask(recipe, className);
             } else if (className.equals("slimeknights.tconstruct.library.recipe.melting.MaterialMeltingRecipe")) {
                 tconstructMaterialMelting(recipe);
@@ -472,6 +503,109 @@ final class ReflectiveRecipeFamilyAdapter {
                 collectField(recipe, "reagent", Direction.INPUT);
                 collectField(recipe, "enchantment", Direction.OUTPUT);
             }
+        }
+
+        private void createProcessingRecipe(Object recipe) {
+            authoritativeOutputs = true;
+            operation("processing_recipe", "ProcessingRecipe");
+            Object resultValue = invokeNoArg(recipe, "getRollableResults");
+            if (resultValue instanceof Collection<?> results) {
+                int index = 0;
+                for (Object result : results) {
+                    Object stackValue = invokeNoArg(result, "getStack");
+                    Object chanceValue = invokeNoArg(result, "getChance");
+                    if (stackValue instanceof ItemStack stack && !stack.isEmpty()
+                            && chanceValue instanceof Number chance) {
+                        JsonObject edge = itemEdge(stack, "getRollableResults()[" + index + "].getStack()");
+                        addChance(edge, chance.doubleValue());
+                        addEdge(Direction.OUTPUT, edge);
+                        addOutputGroup(edge, "getRollableResults()[" + index + "]");
+                        evidence("edge", "getRollableResults()[" + index + "]");
+                    } else {
+                        incomplete("getRollableResults()[" + index + "]");
+                    }
+                    index++;
+                }
+            } else {
+                incomplete("getRollableResults()");
+            }
+
+            Object ingredientValue = invokeNoArg(recipe, "getFluidIngredients");
+            if (ingredientValue instanceof Collection<?> ingredients) {
+                int index = 0;
+                for (Object ingredient : ingredients) {
+                    Object amountValue = invokeNoArg(ingredient, "getRequiredAmount");
+                    Object stacksValue = invokeNoArg(ingredient, "getMatchingFluidStacks");
+                    int found = 0;
+                    if (amountValue instanceof Number amount && stacksValue instanceof Collection<?> stacks) {
+                        for (Object value : stacks) {
+                            if (value instanceof FluidStack stack && !stack.isEmpty()) {
+                                FluidStack exact = stack.copy();
+                                exact.setAmount(amount.intValue());
+                                fluid(exact, Direction.INPUT,
+                                        "getFluidIngredients()[" + index + "].getMatchingFluidStacks()");
+                                found++;
+                            }
+                        }
+                    }
+                    if (found == 0) incomplete("getFluidIngredients()[" + index + "]");
+                    index++;
+                }
+            } else {
+                incomplete("getFluidIngredients()");
+            }
+            collectFluidStacks(invokeNoArg(recipe, "getFluidResults"), Direction.OUTPUT, "getFluidResults()");
+            Object duration = invokeNoArg(recipe, "getProcessingDuration");
+            if (duration instanceof Number number) requirement("time", number, "getProcessingDuration()");
+            else incomplete("getProcessingDuration()");
+            Object heat = invokeNoArg(recipe, "getRequiredHeat");
+            if (heat != null && !String.valueOf(heat).equalsIgnoreCase("NONE")) {
+                requirement("heat", String.valueOf(heat).toLowerCase(Locale.ROOT), "getRequiredHeat()");
+            }
+            Object waterlogged = invokeNoArg(recipe, "isWaterlogged");
+            if (waterlogged instanceof Boolean value && value) {
+                requirement("waterlogged", true, "isWaterlogged()");
+            }
+        }
+
+        private void tconstructMelting(Object recipe) {
+            operation("item_to_fluid_melting", "MeltingRecipe");
+            if (!collectFluidOutput(readDeclaredField(recipe, "output"), Direction.OUTPUT, "output")) {
+                incomplete("output");
+            }
+            Object byproductValue = readDeclaredField(recipe, "byproducts");
+            if (byproductValue instanceof Collection<?> byproducts) {
+                int index = 0;
+                for (Object byproduct : byproducts) {
+                    if (!collectFluidOutput(byproduct, Direction.OUTPUT, "byproducts[" + index + "]")) {
+                        incomplete("byproducts[" + index + "]");
+                    }
+                    index++;
+                }
+            } else {
+                incomplete("byproducts");
+            }
+            Object temperature = readDeclaredField(recipe, "temperature");
+            Object time = readDeclaredField(recipe, "time");
+            if (temperature instanceof Number number) requirement("heat", number, "temperature");
+            else incomplete("temperature");
+            if (time instanceof Number number) requirement("time", number, "time");
+            else incomplete("time");
+            Object oreType = invokeNoArg(recipe, "getOreType");
+            if (oreType != null && !String.valueOf(oreType).equalsIgnoreCase("NONE")) {
+                requirement("quantity_basis", "machine_ore_rate:" + String.valueOf(oreType).toLowerCase(Locale.ROOT),
+                        "getOreType()");
+            }
+        }
+
+        private void tconstructItemCasting(Object recipe) {
+            operation("fluid_casting", "ItemCastingRecipe");
+            if (collectFluidStacks(invokeNoArg(recipe, "getFluids"), Direction.INPUT, "getFluids()") == 0) {
+                incomplete("getFluids()");
+            }
+            Object time = invokeNoArg(recipe, "getCoolingTime");
+            if (time instanceof Number number) requirement("time", number, "getCoolingTime()");
+            else incomplete("getCoolingTime()");
         }
 
         private void bloodMagicFlask(Object recipe, String className) {

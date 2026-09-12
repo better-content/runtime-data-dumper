@@ -44,7 +44,7 @@ import java.util.Map;
 
 public final class RecipeGraphExporter {
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
-    private static final String GRAPH_SCHEMA = "bc.recipe_graph.v2";
+    private static final String GRAPH_SCHEMA = "bc.recipe_graph.v3";
     private static final String REGISTRY_SCHEMA = "bc.registries.v2";
     private static final String TAG_SCHEMA = "bc.tags.v2";
     private static final String MOD_SCHEMA = "bc.mods.v2";
@@ -339,7 +339,10 @@ public final class RecipeGraphExporter {
             append(groups, semantics.inputGroups());
             append(flatInputs, semantics.inputs());
         }
-        if (outputs.isEmpty() && !semantics.outputs().isEmpty()) {
+        if (semantics.authoritativeOutputs()) {
+            outputs = semantics.outputs().deepCopy();
+            outputGroups = semantics.outputGroups().deepCopy();
+        } else if (outputs.isEmpty() && !semantics.outputs().isEmpty()) {
             append(outputs, semantics.outputs());
             append(outputGroups, semantics.outputGroups());
         }
