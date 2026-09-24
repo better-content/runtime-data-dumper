@@ -17,6 +17,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeSerializer;
@@ -474,6 +475,8 @@ public final class RecipeGraphExporter {
                 row.addProperty("description_id", item.getDescriptionId());
                 row.addProperty("max_stack_size", item.getMaxStackSize());
                 row.addProperty("max_damage", item.getMaxDamage());
+                FoodProperties food = item.getFoodProperties(new ItemStack(item), null);
+                if (food != null) row.add("food", foodPropertiesRow(food));
             } else if (value instanceof Block block) {
                 row.addProperty("description_id", block.getDescriptionId());
                 Item blockItem = block.asItem();
@@ -487,6 +490,14 @@ public final class RecipeGraphExporter {
             rows.add(key.toString(), row);
         });
         return rows;
+    }
+
+    static JsonObject foodPropertiesRow(FoodProperties food) {
+        JsonObject row = new JsonObject();
+        row.addProperty("nutrition", food.getNutrition());
+        row.addProperty("saturation_modifier", food.getSaturationModifier());
+        row.addProperty("always_edible", food.canAlwaysEat());
+        return row;
     }
 
     private static <T> JsonObject tagRows(Registry<T> registry) {

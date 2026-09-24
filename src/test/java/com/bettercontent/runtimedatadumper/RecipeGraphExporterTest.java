@@ -4,6 +4,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonArray;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.food.FoodProperties;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -20,6 +21,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class RecipeGraphExporterTest {
+    @Test
+    void foodRegistryRowsPreserveNutritionSaturationAndAlwaysEdibleFlag() {
+        FoodProperties food = new FoodProperties.Builder().nutrition(6).saturationMod(0.4F).alwaysEat().build();
+        JsonObject exported = RecipeGraphExporter.foodPropertiesRow(food);
+
+        assertEquals(6, exported.get("nutrition").getAsInt());
+        assertEquals(0.4F, exported.get("saturation_modifier").getAsFloat());
+        assertTrue(exported.get("always_edible").getAsBoolean());
+    }
+
     private static class FamilyBase {
         public String inheritedValue() { return "inherited"; }
     }
