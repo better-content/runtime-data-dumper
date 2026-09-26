@@ -37,10 +37,12 @@ public final class DebugWorldProbe {
         RecipeGraphMod.LOGGER.info("BC_DEBUG_WORLD_LOADED mode={} game_time={}", MODE, server.overworld().getGameTime());
         if (MODE.equals("save")) {
             server.execute(() -> {
-                server.saveEverything(false, true, true);
-                RecipeGraphMod.LOGGER.info("BC_DEBUG_WORLD_SAVED game_time={}", server.overworld().getGameTime());
+                long gameTime = server.overworld().getGameTime();
                 client.execute(() -> {
+                    // Normal world exit saves and flushes the integrated server. Forcing every
+                    // chunk through saveEverything here can stall this full-pack fixture.
                     client.clearLevel();
+                    RecipeGraphMod.LOGGER.info("BC_DEBUG_WORLD_SAVED game_time={}", gameTime);
                     RecipeGraphMod.LOGGER.info("BC_DEBUG_WORLD_EXITED");
                 });
             });
