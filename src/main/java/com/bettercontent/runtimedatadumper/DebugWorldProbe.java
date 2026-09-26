@@ -33,12 +33,17 @@ public final class DebugWorldProbe {
         if (completed || !(MODE.equals("save") || MODE.equals("verify"))) return;
         if (client.level == null || client.getSingleplayerServer() == null || ++ticks < 200) return;
         completed = true;
-        RecipeGraphMod.LOGGER.info("BC_DEBUG_WORLD_LOADED mode={} game_time={}", MODE, client.getSingleplayerServer().overworld().getGameTime());
+        var server = client.getSingleplayerServer();
+        RecipeGraphMod.LOGGER.info("BC_DEBUG_WORLD_LOADED mode={} game_time={}", MODE, server.overworld().getGameTime());
         if (MODE.equals("save")) {
-            client.getSingleplayerServer().saveEverything(false, true, true);
-            RecipeGraphMod.LOGGER.info("BC_DEBUG_WORLD_SAVED game_time={}", client.getSingleplayerServer().overworld().getGameTime());
-            client.clearLevel();
-            RecipeGraphMod.LOGGER.info("BC_DEBUG_WORLD_EXITED");
+            server.execute(() -> {
+                server.saveEverything(false, true, true);
+                RecipeGraphMod.LOGGER.info("BC_DEBUG_WORLD_SAVED game_time={}", server.overworld().getGameTime());
+                client.execute(() -> {
+                    client.clearLevel();
+                    RecipeGraphMod.LOGGER.info("BC_DEBUG_WORLD_EXITED");
+                });
+            });
         }
     }
 }
