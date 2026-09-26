@@ -1,5 +1,6 @@
 package com.bettercontent.runtimedatadumper;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -10,7 +11,7 @@ public final class RecipeGraphCommands {
 
     @SubscribeEvent
     public static void register(RegisterCommandsEvent event) {
-        event.getDispatcher().register(Commands.literal("runtimedata")
+        var root = Commands.literal("runtimedata")
                 .requires(source -> source.hasPermission(2))
                 .then(Commands.literal("dump").executes(context -> {
                     var result = RecipeGraphExporter.dump(context.getSource().getServer());
@@ -41,6 +42,21 @@ public final class RecipeGraphCommands {
                     }
                     context.getSource().sendFailure(Component.literal("Combat profile dump failed: " + result.message()));
                     return 0;
-                })));
+                }));
+        if (Boolean.getBoolean("bc.pack_test.debug")) {
+            root.then(Commands.literal("geometry")
+                    .then(Commands.argument("id", StringArgumentType.word()).executes(context -> {
+                        String id = StringArgumentType.getString(context, "id");
+                        try {
+                            var output = DebugGeometryProbe.capture(context.getSource().getPlayerOrException(), id);
+                            context.getSource().sendSuccess(() -> Component.literal("BC_GEOMETRY_PROBE id=" + id + " path=" + output), true);
+                            return 1;
+                        } catch (Exception failure) {
+                            context.getSource().sendFailure(Component.literal("BC_GEOMETRY_PROBE_FAILED id=" + id + " reason=" + failure.getMessage()));
+                            return 0;
+                        }
+                    })));
+        }
+        event.getDispatcher().register(root);
     }
 }

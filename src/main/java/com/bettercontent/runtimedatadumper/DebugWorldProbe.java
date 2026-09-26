@@ -10,15 +10,27 @@ import net.minecraftforge.fml.common.Mod;
 @Mod.EventBusSubscriber(modid = RecipeGraphMod.MOD_ID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class DebugWorldProbe {
     private static final String MODE = System.getProperty("bc.pack_test.world", "");
+    private static final boolean DEBUG_MULTIPLAYER = Boolean.getBoolean("bc.pack_test.debug");
     private static int ticks;
     private static boolean completed;
+    private static String lastPosition = "";
 
     private DebugWorldProbe() {}
 
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase != TickEvent.Phase.END || completed || !(MODE.equals("save") || MODE.equals("verify"))) return;
+        if (event.phase != TickEvent.Phase.END) return;
         Minecraft client = Minecraft.getInstance();
+        if (DEBUG_MULTIPLAYER && client.level != null && client.player != null) {
+            var chunk = client.player.chunkPosition();
+            String position = client.level.dimension().location() + " " + chunk.x + " " + chunk.z;
+            if (!position.equals(lastPosition)) {
+                lastPosition = position;
+                RecipeGraphMod.LOGGER.info("BC_DEBUG_CLIENT_POSITION dimension={} chunk_x={} chunk_z={}",
+                        client.level.dimension().location(), chunk.x, chunk.z);
+            }
+        }
+        if (completed || !(MODE.equals("save") || MODE.equals("verify"))) return;
         if (client.level == null || client.getSingleplayerServer() == null || ++ticks < 200) return;
         completed = true;
         RecipeGraphMod.LOGGER.info("BC_DEBUG_WORLD_LOADED mode={} game_time={}", MODE, client.getSingleplayerServer().overworld().getGameTime());
