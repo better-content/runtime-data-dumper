@@ -40,6 +40,7 @@ final class RecipeGraphExporterTest {
     void reflectionIsConfinedToExactNamedCachedAdapterBoundaries() throws Exception {
         Set<String> allowed = Set.of(
                 "com/bettercontent/runtimedatadumper/ReflectiveFabricBiomeModifierAdapter.java",
+                "com/bettercontent/runtimedatadumper/ReflectiveEmiReadinessAdapter.java",
                 "com/bettercontent/runtimedatadumper/ReflectivePneumaticRecipeAdapter.java",
                 "com/bettercontent/runtimedatadumper/ReflectiveRecipeFamilyAdapter.java");
         String reflectionSyntax = "java.lang.reflect|\\.getDeclared(?:Field|Fields|Method|Methods|Constructor|Constructors)\\("

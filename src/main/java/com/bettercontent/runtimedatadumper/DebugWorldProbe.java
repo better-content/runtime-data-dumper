@@ -32,8 +32,12 @@ public final class DebugWorldProbe {
         }
         if (completed || !(MODE.equals("save") || MODE.equals("verify"))) return;
         if (client.level == null || client.getSingleplayerServer() == null || ++ticks < 200) return;
+        // Leaving while EMI is baking recipes clears JEMI's runtime under its worker and
+        // loses fluid recipes. The debug save must wait for that client work to finish.
+        if (MODE.equals("save") && !ReflectiveEmiReadinessAdapter.isLoaded()) return;
         completed = true;
         var server = client.getSingleplayerServer();
+        if (MODE.equals("save")) RecipeGraphMod.LOGGER.info("BC_DEBUG_EMI_READY");
         RecipeGraphMod.LOGGER.info("BC_DEBUG_WORLD_LOADED mode={} game_time={}", MODE, server.overworld().getGameTime());
         if (MODE.equals("save")) {
             server.execute(() -> {
@@ -49,4 +53,5 @@ public final class DebugWorldProbe {
             });
         }
     }
+
 }
