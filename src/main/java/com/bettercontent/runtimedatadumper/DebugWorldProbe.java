@@ -41,6 +41,7 @@ public final class DebugWorldProbe {
                 client.execute(() -> {
                     // Normal world exit saves and flushes the integrated server. Forcing every
                     // chunk through saveEverything here can stall this full-pack fixture.
+                    client.level.disconnect();
                     client.clearLevel();
                     RecipeGraphMod.LOGGER.info("BC_DEBUG_WORLD_SAVED game_time={}", gameTime);
                     RecipeGraphMod.LOGGER.info("BC_DEBUG_WORLD_EXITED");
